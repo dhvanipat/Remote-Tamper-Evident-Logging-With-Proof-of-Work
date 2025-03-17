@@ -1,0 +1,74 @@
+#!/usr/bin/python3
+import socket
+import sys
+import hashlib
+import base64
+
+def send_string_to_server(port, message):
+    try:
+        # Connect to the server
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect(('localhost', port))
+
+        ######################
+        ### Convert any whitespace to spaces
+        ### Modify the messsage to include the proof-of-work (Pow+':'+message)
+        ######################
+        message = "".join([' ' if char.isspace() else char for char in message])
+        charset = [
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 
+            'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 
+            'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 
+            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+        ]
+        pow = ""
+        index = [0]
+
+        while True:
+            pow = ""
+            for i in range(len(index) - 1, -1, -1):
+                if index[i] == len(charset):
+                    index[i] = 0
+                    if i == 0:
+                        index.insert(0, 0)
+                    else:
+                        index[i - 1] += 1
+
+                pow += charset[index[i]]
+
+            index[len(index) - 1] += 1
+
+            sha256_hash = hashlib.sha256((pow + ":" + message).encode('utf-8')).digest()
+            bits = "".join(f'{byte:08b}' for byte in sha256_hash[:3])[:22]
+            # base64_hash = base64.b64encode(sha256_hash).decode('utf-8')
+
+            if bits == '0' * 22:
+                message = pow + ":" + message
+                break
+                
+
+        with client_socket.makefile('r') as server_in, client_socket.makefile('w') as server_out:
+            # Send the message to the server, terminated by a newline
+            server_out.write(message + "\n")
+            server_out.flush()
+
+            # Receive and print the confirmation message from the server
+            response = server_in.readline().strip()
+            print(f"Server response: {response}")
+
+    except Exception as e:
+        print(f"Error communicating with server: {e}")
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        print("Exception:", e)
+        print("Line Number:", exc_tb.tb_lineno)
+        #     client_socket.close()
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: log <port> <message>")
+    else:
+        port = int(sys.argv[1])
+        message = sys.argv[2]
+        send_string_to_server(port, message)
+

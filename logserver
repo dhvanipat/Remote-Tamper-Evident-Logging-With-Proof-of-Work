@@ -1,0 +1,106 @@
+#!/usr/bin/python3
+import base64
+from datetime import datetime
+import hashlib
+import os
+import socket
+
+def handle_client(client_socket):
+    try:
+        # Use socket file interface to read line by line
+        with client_socket.makefile('r') as client_in, client_socket.makefile('w') as client_out:
+            # Receive the string from the client (terminated by a newline)
+            message = client_in.readline().strip()
+            print(f"Received: {message}")
+
+
+            ########## YOUR CODE HERE ############
+            ### Validate the the PoW in the message
+            ### Stril the PoW from the message
+            ### Read the last hash from loghead.txt
+            ### Create the full line for the log entry
+            ### Compute its hash
+            ### Append the line to the log
+            ### Update loghead.txt
+            ### Add error checking
+            #######################################
+
+            sha256_hash = hashlib.sha256((message).encode('utf-8')).digest()
+            hash_string = sha256_hash.hex()
+            print("hash(message):", hash_string)
+
+            bits = "".join(f'{byte:08b}' for byte in sha256_hash)            
+            count = 0
+            for bit in bits:
+                if bit == '0':
+                    count += 1
+                else:
+                    break
+
+            print("hash contains", count, "leading 0 bits")
+
+            if ":" not in message:
+                response = "invalid log message: missing a ':'"
+                close_connection()
+                return
+            elif count < 22:
+                response = "invalid PoW"
+                close_connection()
+                return
+            elif not os.path.exists("loghead.txt") and os.path.exists("log.txt"):
+                response = "error: loghead.txt missing but log.txt exists"
+                close_connection()
+                return
+
+            # if os.path.exists("log.txt")
+            message = (message.split(":", 1))[1]
+            currtime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+            # Append the received string to log.txt
+            try:
+                with open("log.txt", "a") as log_file:
+                    log_file.write(message + "\n")
+            except PermissionError as e:
+                print("Error opening log file:")
+                response = "error opening log.txt for writing: Permission denied"
+                close_connection()
+                return
+
+            
+
+            # Send a response message back to the client (terminated by a newline)
+            response = "ok\n"
+            client_out.write(response)
+            client_out.flush()
+
+    except Exception as e:
+        print(f"logserver: {e}")
+    finally:
+        client_socket.close()
+
+    def close_connection():
+        client_out.write(response)
+        client_out.flush()
+        client_socket.close()
+
+
+def start_server():
+    # Create a socket and bind it to any available port
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind(('0.0.0.0', 0))  # Bind to any available port
+    server_socket.listen(5)
+
+    # Get the port number and print it
+    port = server_socket.getsockname()[1]
+    print(f"Server listening on port {port}")
+
+    # Continuously accept and handle clients
+    while True:
+        client_socket, addr = server_socket.accept()
+        print(f"Accepted connection from {addr}")
+        handle_client(client_socket)
+
+if __name__ == "__main__":
+    start_server()
+
