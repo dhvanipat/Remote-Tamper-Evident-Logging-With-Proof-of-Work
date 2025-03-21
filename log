@@ -41,13 +41,12 @@ def send_string_to_server(port, message):
 
             sha256_hash = hashlib.sha256((pow + ":" + message).encode('utf-8')).digest()
             bits = "".join(f'{byte:08b}' for byte in sha256_hash[:3])[:22]
-            # base64_hash = base64.b64encode(sha256_hash).decode('utf-8')
 
             if bits == '0' * 22:
                 message = pow + ":" + message
                 break
                 
-
+    
         with client_socket.makefile('r') as server_in, client_socket.makefile('w') as server_out:
             # Send the message to the server, terminated by a newline
             server_out.write(message + "\n")

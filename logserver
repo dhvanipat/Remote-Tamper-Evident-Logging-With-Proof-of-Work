@@ -6,11 +6,18 @@ import os
 import socket
 
 def handle_client(client_socket):
+    def close_connection():
+        client_out.write(response)
+        client_out.flush()
+        client_socket.close()
+
+    response = None
+
     try:
         # Use socket file interface to read line by line
         with client_socket.makefile('r') as client_in, client_socket.makefile('w') as client_out:
             # Receive the string from the client (terminated by a newline)
-            message = client_in.readline().strip()
+            message = client_in.readline()[:-1]
             print(f"Received: {message}")
 
 
@@ -39,6 +46,7 @@ def handle_client(client_socket):
 
             print("hash contains", count, "leading 0 bits")
 
+            # message validation
             if ":" not in message:
                 response = "invalid log message: missing a ':'"
                 close_connection()
@@ -47,43 +55,73 @@ def handle_client(client_socket):
                 response = "invalid PoW"
                 close_connection()
                 return
-            elif not os.path.exists("loghead.txt") and os.path.exists("log.txt"):
+            
+
+            prev_hash = "start"
+
+            if os.path.exists("log.txt") and not os.path.exists("loghead.txt"):
                 response = "error: loghead.txt missing but log.txt exists"
                 close_connection()
                 return
+            elif not os.path.exists("log.txt"):
+                open("log.txt", "w+").close()
+            else:
+                # get head pointer
+                try:
+                    with open("loghead.txt", "r") as file:
+                        prev_hash = file.read().strip()
+                        if not prev_hash:
+                            prev_hash = "start"
+                except PermissionError as e:
+                    pass
 
-            # if os.path.exists("log.txt")
-            message = (message.split(":", 1))[1]
+
+
+            # format new log entry
+            message = (message.split(":", 1))[1]  # remove PoW
+            message = "".join([' ' if char.isspace() else char for char in message])
             currtime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            message = currtime + " - " + prev_hash + " " + message
+            print("logging: \"" + message + "\"")
 
+            # calculate new head pointer based on message
+            new_hash = hashlib.sha256((message).encode('utf-8')).digest()
+            new_hash = base64.b64encode(new_hash).decode('utf-8')
+            print("b64 hash = \"" + new_hash + "\"")
+            new_hash = new_hash[-24:]
+            print("last 24 bytes of the b64-encoded hash = \"" + new_hash + "\"")
+
+            # save new headpointer
+            try:
+                with open("loghead.txt", "w") as file:
+                    file.write(new_hash + "\n")
+            except PermissionError as e:
+                print("error opening loghead.txt for writing: Permission denied")
+                response = "error opening loghead.txt for writing"
+                close_connection()
+                return
 
             # Append the received string to log.txt
             try:
                 with open("log.txt", "a") as log_file:
                     log_file.write(message + "\n")
             except PermissionError as e:
-                print("Error opening log file:")
+                print("Error opening log file: Permission denied")
                 response = "error opening log.txt for writing: Permission denied"
                 close_connection()
                 return
 
-            
-
             # Send a response message back to the client (terminated by a newline)
             response = "ok\n"
-            client_out.write(response)
-            client_out.flush()
+            close_connection()
+            return
 
     except Exception as e:
-        print(f"logserver: {e}")
-    finally:
-        client_socket.close()
-
-    def close_connection():
-        client_out.write(response)
-        client_out.flush()
-        client_socket.close()
-
+        response = "error: " + str(e)
+        print("logserver: " + str(e))
+        close_connection()
+        return
+        
 
 def start_server():
     # Create a socket and bind it to any available port
