@@ -18,7 +18,7 @@ def handle_client(client_socket):
         with client_socket.makefile('r') as client_in, client_socket.makefile('w') as client_out:
             # Receive the string from the client (terminated by a newline)
             message = client_in.readline()[:-1]
-            print(f"Received: {message}")
+            print(f"Received: \"{message}\"")
 
 
             ########## YOUR CODE HERE ############
