@@ -1,0 +1,64 @@
+#!/usr/bin/python3
+import base64
+import hashlib
+import os
+import sys
+
+def fail(error_msg:str, line:int=-1):
+    if line != -1:
+        print(f"failed: line {line}: {error_msg}")
+    else:
+        print(f"failed: {error_msg}")
+
+    exit(1)
+
+if __name__ == "__main__":
+    if len(sys.argv) != 1:
+        print("Usage: checklog")
+        exit()
+
+    if not os.path.exists("log.txt"):
+        fail("log file is missing")
+    elif not os.path.exists("loghead.txt"):
+        fail("head pointer file is missing")
+
+    try:
+        with open("loghead.txt", "r") as loghead:
+            head_ptr = loghead.read().rstrip("\n")
+
+            try:
+                with open("log.txt", "r") as log:
+                    prev_hash = None
+                    line_num = 0
+
+                    for line in log:
+                        line = line.rstrip("\n")
+                        line_num += 1
+
+                        sha256_hash = hashlib.sha256((line).encode('utf-8')).digest()
+                        curr_hash = base64.b64encode(sha256_hash).decode('utf-8')[-24:]
+                        hash = line.split()[3]
+
+                        if line_num == 1:
+                            if hash != "start":
+                                fail("the hash on the first line is not \"start\"", 0)
+                        else:
+                            if hash != prev_hash:
+                                fail(f"corruption on line {str(line_num - 1)}")
+
+                        # print(line_num,line)
+                        # print("line hash", hash)
+                        # print("prev hash", prev_hash)
+
+                        prev_hash = curr_hash
+
+                    if prev_hash != head_ptr:
+                        fail(f"corruption on line {str(line_num)}")
+
+            except Exception as e:
+                fail(str(e))
+    except Exception as e:
+        fail(str(e))
+
+    print("Valid")
+    exit(0)
